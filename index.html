@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Event Operations BI — Lavender (Stable KPIs + Autocomplete)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Icons + Day.js -->
+  <link href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" rel="stylesheet">
+  <script src="https://unpkg.com/dayjs@1.11.11/dayjs.min.js"></script>
+  <script src="https://unpkg.com/dayjs@1.11.11/plugin/customParseFormat.js"></script>
+  <script>dayjs.extend(dayjs_plugin_customParseFormat)</script>
+
+  <style>
+    /* Light lavender (default) + Dark */
+    :root {
+      --bg:#F6F3FF; --overlay: radial-gradient(900px 500px at -150px -200px,#d8ccff55,transparent 60%), radial-gradient(1000px 600px at 120% -100px,#e9e2ff66,transparent 60%), #F6F3FF;
+      --panel:#fff; --card:#FCFAFF; --border:#E4DDF8; --text:#1f1b2e; --muted:#6f6794;
+      --accent:#7c3aed; --accent-2:#5b21b6; --accent-3:#a78bfa;
+      --success:#059669; --warning:#d97706; --danger:#dc2626;
+      --table-odd:#F3EEFF; --shadow:0 8px 28px rgba(72,50,154,.08); --glass:rgba(255,255,255,.75);
+      --focus:#c4b5fd77; --pill:#efeaff; --popover:#fff; --popover-border:#dcd3fb;
+    }
+    [data-theme="dark"]{
+      --bg:#161226; --overlay: radial-gradient(900px 500px at -150px -200px,#7c3aed22,transparent 60%), radial-gradient(1000px 600px at 120% -100px,#a78bfa1a,transparent 60%), #161226;
+      --panel:#1c1533; --card:#1b1437; --border:#3f3cbb; --text:#f5f3ff; --muted:#d6d3ef;
+      --accent:#a78bfa; --accent-2:#7c3aed; --accent-3:#c4b5fd;
+      --success:#34d399; --warning:#f59e0b; --danger:#ef4444;
+      --table-odd:#211a4b; --shadow:0 8px 28px rgba(0,0,0,.45); --glass:rgba(29,23,57,.75);
+      --focus:#7c3aed55; --pill:#241d50; --popover:#1c1637; --popover-border:#4b3bb0;
+    }
+
+    *{box-sizing:border-box} html,body{margin:0;height:100%}
+    body{background:var(--overlay);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial,"Noto Sans";line-height:1.45;letter-spacing:.2px}
+
+    header{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:var(--glass);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:14px 18px}
+    header h1{margin:0;font-size:18px;font-weight:800;letter-spacing:.4px}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap}
+    .tab-btn{background:#fff;color:var(--text);border:1px solid var(--border);padding:8px 12px;font-size:13px;border-radius:12px;cursor:pointer;box-shadow:0 1px 0 #00000010,inset 0 0 0 1px #ffffff66;transition:transform .06s,box-shadow .12s,border-color .12s,background .12s}
+    [data-theme="dark"] .tab-btn{background:#1c1637;box-shadow:inset 0 0 0 1px #ffffff10,0 1px 0 #00000050}
+    .tab-btn:hover{border-color:var(--accent-3);box-shadow:0 4px 14px rgba(124,58,237,.2);transform:translateY(-1px)}
+    .tab-btn.active{background:#f0eaff;border-color:var(--accent)}
+    [data-theme="dark"] .tab-btn.active{background:#251c4f}
+    .theme-toggle{display:inline-flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:999px;padding:6px 12px;background:#fff;cursor:pointer}
+    [data-theme="dark"] .theme-toggle{background:#1c1637}
+    .theme-toggle .icon{font-size:18px}.theme-toggle .label{font-size:12px;color:var(--muted)}
+
+    main{padding:18px;max-width:1300px;margin:0 auto 56px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+    .grid{display:grid;gap:12px}
+    .grid.kpi{grid-template-columns:repeat(4,minmax(0,1fr))}
+    @media(max-width:1000px){.grid.kpi{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:580px){.grid.kpi{grid-template-columns:1fr}}
+    .card h3{margin:0 0 6px;font-size:14px;color:var(--muted);font-weight:700}
+    .kpi .value{font-size:34px;font-weight:900;margin-top:6px;color:var(--accent-2);text-shadow:0 0 8px #7c3aed18}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.spacer{flex:1}
+    .two{display:grid;grid-template-columns:1.6fr 1.4fr;gap:12px}
+    @media(max-width:1100px){.two{grid-template-columns:1fr}}
+
+    input,select,textarea,button{background:#fff;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:9px 12px;font-size:14px;box-shadow:inset 0 0 0 1px #ffffffcc}
+    [data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea,[data-theme="dark"] button{background:#1a1538;box-shadow:inset 0 0 0 1px #ffffff10;color:var(--text)}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent-3);box-shadow:0 0 0 3px var(--focus),inset 0 0 0 1px #ffffff80}
+    textarea{min-height:100px}
+    button.primary{background:linear-gradient(180deg,#9f7aea,#7c3aed);color:#fff;border-color:var(--accent)}
+    button.primary:hover{box-shadow:0 6px 20px rgba(124,58,237,.35)}
+    button.ghost{background:#f8f6ff}[data-theme="dark"] button.ghost{background:#1a1530}
+    button.success{background:linear-gradient(180deg,#10b981,#059669);color:#fff;border-color:#10b981}
+    button.danger{background:linear-gradient(180deg,#ef4444,#b91c1c);color:#fff;border-color:#ef4444}
+
+    .table-wrap{overflow:auto;border-radius:12px;border:1px solid var(--border)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px}
+    th{text-align:left;color:var(--muted);background:#f5f0ff;position:sticky;top:0;z-index:1}
+    [data-theme="dark"] th{background:#1a163b;color:#d6d3ef}
+    tbody tr:nth-child(odd) td{background:var(--table-odd)}
+    [data-theme="dark"] tr:hover td{background:#211a4b}
+    tr:hover td{background:#efe8ff}
+
+    .status{padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border)}
+    .s-planning{background:#ede9fe;color:#5b21b6}
+    .s-executing{background:#e0e7ff;color:#3730a3}
+    .s-completed{background:#e6f9f2;color:#065f46;border-color:#10b98166}
+    .s-overdue{background:#fee2e2;color:#991b1b;border-color:#ef444466}
+    [data-theme="dark"] .s-planning{background:#291f5f;color:#c4b5fd}
+    [data-theme="dark"] .s-executing{background:#1f215f;color:#a5b4fc}
+    [data-theme="dark"] .s-completed{background:#1c2f2a;color:#86efac}
+    [data-theme="dark"] .s-overdue{background:#3a1820;color:#fecaca}
+
+    .pill{padding:3px 8px;border-radius:999px;border:1px solid var(--border);font-size:12px;background:var(--pill);color:var(--text)}
+    .muted{color:var(--muted)} .hr{height:1px;background:var(--border);margin:12px 0}
+    .map{height:420px;border-radius:12px;border:1px solid var(--border);overflow:hidden}
+
+    .autocomplete-wrap{position:relative}
+    .autocomplete-list{position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--popover);border:1px solid var(--popover-border);border-radius:12px;margin-top:6px;box-shadow:var(--shadow);max-height:260px;overflow:auto}
+    .autocomplete-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px}
+    .autocomplete-item:last-child{border-bottom:0}
+    .autocomplete-item:hover,.autocomplete-item.active{background:#efe8ff}
+    [data-theme="dark"] .autocomplete-item:hover,[data-theme="dark"] .autocomplete-item.active{background:#211a4b}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Event Operations BI</h1>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="events">Events</button>
+    <button class="tab-btn" data-tab="tasks">Tasks</button>
+    <button class="tab-btn" data-tab="notes">Post-Event Notes</button>
+    <button class="tab-btn" data-tab="map">Map</button>
+    <button class="tab-btn" data-tab="settings">Settings</button>
+  </div>
+  <button id="themeToggle" class="theme-toggle" title="Toggle theme">
+    <i id="themeIcon" class="icon ph ph-sun-dim"></i>
+    <span id="themeLabel" class="label">Light</span>
+  </button>
+</header>
+
+<main>
+  <!-- DASHBOARD -->
+  <section id="dashboard" class="tab card">
+    <div class="grid kpi">
+      <div class="card kpi"><h3>Upcoming Events</h3><div class="value" id="kpiUpcoming">0</div></div>
+      <div class="card kpi"><h3>Tasks Completion %</h3><div class="value" id="kpiCompletion">0%</div></div>
+      <div class="card kpi"><h3>Overdue Tasks</h3><div class="value" id="kpiOverdue">0</div></div>
+      <div class="card kpi"><h3>Average Rating</h3><div class="value" id="kpiRating">0.0</div></div>
+    </div>
+
+    <div class="hr"></div>
+    <div class="two">
+      <div class="card">
+        <div class="row">
+          <h3>Active Tasks</h3><div class="spacer"></div>
+          <div class="small">Overdue / In Progress / Completed</div>
+        </div>
+        <div class="table-wrap">
+          <table id="tblDashTasks"><thead><tr>
+            <th>Task</th><th>Event</th><th>Assigned</th><th>Due</th><th>Status</th><th>Actions</th>
+          </tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row"><h3>Filters</h3><div class="spacer"></div>
+          <button class="ghost" id="btnClearFilters"><i class="ph ph-funnel"></i> Clear</button>
+        </div>
+        <div class="grid" style="grid-template-columns: repeat(2,1fr); gap:8px;">
+          <div><div class="small">Search</div><input id="fSearch" placeholder="Search event/task..." /></div>
+          <div><div class="small">Event Type</div>
+            <select id="fType"><option value="">All</option><option>Wedding</option><option>Baptism</option><option>Party</option></select>
+          </div>
+          <div><div class="small">Status</div>
+            <select id="fStatus"><option value="">All</option><option>Planning</option><option>Executing</option><option>Completed</option></select>
+          </div>
+          <div><div class="small">Date From</div><input id="fFrom" type="date"></div>
+          <div><div class="small">Date To</div><input id="fTo" type="date"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+    <div class="card">
+      <div class="row"><h3>Upcoming Events (filtered)</h3><div class="spacer"></div></div>
+      <div class="table-wrap">
+        <table id="tblDashEvents">
+          <thead><tr><th>Event</th><th>Type</th><th>Date</th><th>Address</th><th>Status</th><th>Owner</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- EVENTS -->
+  <section id="events" class="tab card" style="display:none;">
+    <div class="row"><h3>Events</h3><div class="spacer"></div>
+      <button class="primary" id="btnAddEvent"><i class="ph ph-plus"></i> Add Event</button>
+    </div>
+    <div class="table-wrap"><table id="tblEvents"><thead><tr>
+      <th>Title</th><th>Type</th><th>Date</th><th>Address</th><th>Status</th><th>Owner</th><th>Lat</th><th>Lon</th><th>Actions</th>
+    </tr></thead><tbody></tbody></table></div>
+
+    <div class="hr"></div>
+    <h3>Event Form</h3>
+    <div class="grid" style="grid-template-columns: repeat(4,1fr); gap:8px;">
+      <input id="eId" type="hidden">
+      <div><div class="small">Title*</div><input id="eTitle" placeholder="e.g., García Baptism"/></div>
+      <div><div class="small">Type*</div>
+        <select id="eType"><option>Wedding</option><option>Baptism</option><option>Party</option></select>
+      </div>
+      <div><div class="small">Date*</div><input id="eDate" type="date"/></div>
+      <div><div class="small">Status*</div>
+        <select id="eStatus"><option>Planning</option><option>Executing</option><option>Completed</option></select>
+      </div>
+
+      <div class="autocomplete-wrap" style="grid-column: 1 / span 2;">
+        <div class="small">Address* (type to search)</div>
+        <input id="eAddress" placeholder="Start typing an address…" autocomplete="off"/>
+        <div id="addrList" class="autocomplete-list" style="display:none;"></div>
+      </div>
+
+      <div><div class="small">Owner</div><input id="eOwner" placeholder="owner@yourorg.com"/></div>
+      <div><div class="small">Latitude</div><input id="eLat" type="number" step="any" placeholder="auto from address"/></div>
+      <div><div class="small">Longitude</div><input id="eLon" type="number" step="any" placeholder="auto from address"/></div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button class="success" id="btnSaveEvent"><i class="ph ph-floppy-disk"></i> Save</button>
+      <button class="ghost" id="btnResetEvent"><i class="ph ph-arrow-counter-clockwise"></i> Reset</button>
+    </div>
+    <div class="small muted" style="margin-top:6px;">Address search by OpenStreetMap Nominatim. Select a suggestion to enable saving.</div>
+  </section>
+
+  <!-- TASKS -->
+  <section id="tasks" class="tab card" style="display:none;">
+    <div class="row"><h3>Tasks</h3><div class="spacer"></div>
+      <button class="primary" id="btnAddTask"><i class="ph ph-plus"></i> Add Task</button>
+    </div>
+    <div class="table-wrap"><table id="tblTasks"><thead><tr>
+      <th>Task</th><th>Event</th><th>Due</th><th>Assigned</th><th>Status</th><th>Actions</th>
+    </tr></thead><tbody></tbody></table></div>
+
+    <div class="hr"></div>
+    <h3>Task Form</h3>
+    <div class="grid" style="grid-template-columns: repeat(4,1fr); gap:8px;">
+      <input id="tId" type="hidden">
+      <div><div class="small">Event*</div><select id="tEvent"></select></div>
+      <div><div class="small">Title*</div><input id="tTitle" placeholder="e.g., Book photographer"/></div>
+      <div><div class="small">Due Date</div><input id="tDue" type="date"/></div>
+      <div><div class="small">Assigned To</div><input id="tAssigned" placeholder="name or email"/></div>
+      <div><div class="small">Status</div>
+        <select id="tStatus"><option>Not Started</option><option>In Progress</option><option>Completed</option></select>
+      </div>
+      <div style="grid-column: 1/-1;"><div class="small">Notes</div><textarea id="tNotes"></textarea></div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button class="success" id="btnSaveTask"><i class="ph ph-floppy-disk"></i> Save</button>
+      <button class="ghost" id="btnResetTask"><i class="ph ph-arrow-counter-clockwise"></i> Reset</button>
+    </div>
+  </section>
+
+  <!-- NOTES -->
+  <section id="notes" class="tab card" style="display:none;">
+    <div class="row"><h3>Post-Event Notes</h3><div class="spacer"></div>
+      <button class="primary" id="btnAddNote"><i class="ph ph-plus"></i> Add Note</button>
+    </div>
+    <div class="table-wrap"><table id="tblNotes"><thead><tr>
+      <th>Event</th><th>Rating</th><th>Notes</th><th>By</th><th>When</th><th>Actions</th>
+    </tr></thead><tbody></tbody></table></div>
+
+    <div class="hr"></div>
+    <h3>Note Form</h3>
+    <div class="grid" style="grid-template-columns: repeat(4,1fr); gap:8px;">
+      <input id="nId" type="hidden">
+      <div><div class="small">Event*</div><select id="nEvent"></select></div>
+      <div><div class="small">Rating</div>
+        <select id="nRating"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+      </div>
+      <div><div class="small">Created By</div><input id="nBy" placeholder="your name"/></div>
+      <div><div class="small">Created On</div><input id="nOn" type="datetime-local"/></div>
+      <div style="grid-column: 1/-1;"><div class="small">Notes</div><textarea id="nNotes"></textarea></div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button class="success" id="btnSaveNote"><i class="ph ph-floppy-disk"></i> Save</button>
+      <button class="ghost" id="btnResetNote"><i class="ph ph-arrow-counter-clockwise"></i> Reset</button>
+    </div>
+  </section>
+
+  <!-- MAP -->
+  <section id="map" class="tab card" style="display:none;">
+    <div class="row"><h3>Interactive Map (Mexico)</h3><div class="spacer"></div>
+      <div class="small">Markers follow filters from the Dashboard.</div>
+    </div>
+    <div id="leafletMap" class="map"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="settings" class="tab card" style="display:none;">
+    <h3>Settings & Data</h3>
+    <div class="row" style="gap:8px; margin:8px 0 12px;">
+      <button id="btnExport" class="primary"><i class="ph ph-download"></i> Export JSON</button>
+      <label class="pill">Import JSON <input id="fileImport" type="file" accept="application/json" style="display:none;"></label>
+      <button id="btnImport" class="primary"><i class="ph ph-upload"></i> Choose File…</button>
+      <button id="btnSeed" class="ghost"><i class="ph ph-sparkle"></i> Load Demo Data</button>
+      <button id="btnClear" class="danger"><i class="ph ph-trash"></i> Clear All Data</button>
+    </div>
+    <div class="small">Data persists in your browser (<code>localStorage</code>). Use Export/Import to share or commit JSON.</div>
+  </section>
+</main>
+
+<script>
+/* ---------- Helpers ---------- */
+const safe = (fn) => { try { fn() } catch (e){ console.error(e) } };
+const qs = (s) => document.querySelector(s);
+const qsa = (s) => Array.from(document.querySelectorAll(s));
+const fmtDate = (s)=> s ? dayjs(s).format("DD MMM YYYY") : "";
+
+/* ---------- Theme toggle ---------- */
+const THEME_KEY="eventOpsTheme";
+function reflectThemeUI(){
+  const isDark = document.body.getAttribute("data-theme")==="dark";
+  qs("#themeLabel").textContent = isDark ? "Dark" : "Light";
+  qs("#themeIcon").className = "icon " + (isDark ? "ph ph-moon" : "ph ph-sun-dim");
+}
+function applyTheme(theme){
+  if(theme==="dark"){ document.body.setAttribute("data-theme","dark"); }
+  else { document.body.removeAttribute("data-theme"); theme="light"; }
+  localStorage.setItem(THEME_KEY, theme); reflectThemeUI();
+}
+(function initTheme(){
+  const saved = localStorage.getItem(THEME_KEY);
+  if(saved){ applyTheme(saved) } else {
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(prefersDark ? "dark" : "light");
+  }
+})();
+qs("#themeToggle").addEventListener("click", ()=> applyTheme(document.body.getAttribute("data-theme")==="dark" ? "light" : "dark"));
+
+/* ---------- Data store ---------- */
+const LS_KEY="eventOpsData_v5";
+const store = {
+  data:{events:[],tasks:[],notes:[]},
+  load(){ const raw=localStorage.getItem(LS_KEY); if(raw){ try{ this.data=JSON.parse(raw) }catch(e){console.error(e)} } },
+  save(){ localStorage.setItem(LS_KEY, JSON.stringify(this.data)) },
+  uid(p="id"){ return `${p}_${Math.random().toString(36).slice(2,9)}` },
+  upsertEvent(e){ if(!e.id){ e.id=this.uid("evt"); this.data.events.push(e) } else { const i=this.data.events.findIndex(x=>x.id===e.id); if(i>=0)this.data.events[i]=e; else this.data.events.push(e) } this.save() },
+  removeEvent(id){ this.data.tasks=this.data.tasks.filter(t=>t.eventId!==id); this.data.notes=this.data.notes.filter(n=>n.eventId!==id); this.data.events=this.data.events.filter(e=>e.id!==id); this.save() },
+  upsertTask(t){ if(!t.id){ t.id=this.uid("tsk"); this.data.tasks.push(t) } else { const i=this.data.tasks.findIndex(x=>x.id===t.id); if(i>=0)this.data.tasks[i]=t; else this.data.tasks.push(t) } this.save() },
+  removeTask(id){ this.data.tasks=this.data.tasks.filter(t=>t.id!==id); this.save() },
+  upsertNote(n){ if(!n.id){ n.id=this.uid("nte"); this.data.notes.push(n) } else { const i=this.data.notes.findIndex(x=>x.id===n.id); if(i>=0)this.data.notes[i]=n; else this.data.notes.push(n) } this.save() },
+  removeNote(id){ this.data.notes=this.data.notes.filter(n=>n.id!==id); this.save() },
+};
+function seedDemo(){
+  const today=dayjs();
+  const evts=[
+    { id:store.uid("evt"), title:"Martínez Wedding", eventType:"Wedding", eventDate:today.add(30,'day').format("YYYY-MM-DD"), address:"Zócalo, Centro, Ciudad de México", status:"Planning", owner:"laura@yourorg.com", lat:19.4326, lon:-99.1332 },
+    { id:store.uid("evt"), title:"García Baptism", eventType:"Baptism", eventDate:today.add(18,'day').format("YYYY-MM-DD"), address:"Catedral de Guadalajara, Jalisco", status:"Planning", owner:"diego@yourorg.com", lat:20.6769, lon:-103.3466 },
+    { id:store.uid("evt"), title:"Fernández Anniversary Party", eventType:"Party", eventDate:today.add(7,'day').format("YYYY-MM-DD"), address:"Macroplaza, Monterrey, NL", status:"Executing", owner:"ana@yourorg.com", lat:25.6714, lon:-100.309 },
+  ];
+  const tasks=[
+    { id:store.uid("tsk"), eventId:evts[0].id, title:"Confirm venue", dueDate:today.add(3,'day').format("YYYY-MM-DD"), assignedTo:"Carlos", status:"In Progress", completedDate:"", notes:"Awaiting deposit" },
+    { id:store.uid("tsk"), eventId:evts[0].id, title:"Photographer booking", dueDate:today.add(5,'day').format("YYYY-MM-DD"), assignedTo:"Maria", status:"Not Started", completedDate:"", notes:"" },
+    { id:store.uid("tsk"), eventId:evts[1].id, title:"Catering menu", dueDate:today.add(-1,'day').format("YYYY-MM-DD"), assignedTo:"Diego", status:"Not Started", completedDate:"", notes:"" },
+    { id:store.uid("tsk"), eventId:evts[2].id, title:"Hire DJ", dueDate:today.add(2,'day').format("YYYY-MM-DD"), assignedTo:"Ana", status:"Not Started", completedDate:"", notes:"" },
+  ];
+  const notes=[{ id:store.uid("nte"), eventId:evts[0].id, rating:4, notes:"Great vendor alignment. Improve timeline buffer.", createdBy:"Laura", createdOn:today.add(-5,'day').hour(10).minute(30).format("YYYY-MM-DDTHH:mm") }];
+  store.data={events:evts,tasks,notes}; store.save();
+}
+
+/* ---------- State & filters ---------- */
+const state={filters:{search:"",type:"",status:"",from:"",to:""}, currentTab:"dashboard", addressPick:null};
+function isOverdue(t){ if(t.status==="Completed"||!t.dueDate) return false; return dayjs(t.dueDate).isBefore(dayjs(),"day") }
+function filteredEvents(){
+  const f=state.filters;
+  return store.data.events.filter(e=>{
+    if(f.type && e.eventType!==f.type) return false;
+    if(f.status && e.status!==f.status) return false;
+    if(f.search){
+      const s=f.search.toLowerCase();
+      if(!(e.title||"").toLowerCase().includes(s) && !(e.address||"").toLowerCase().includes(s)) return false;
+    }
+    if(f.from && dayjs(e.eventDate).isBefore(dayjs(f.from),"day")) return false;
+    if(f.to && dayjs(e.eventDate).isAfter(dayjs(f.to),"day")) return false;
+    return true;
+  }).sort((a,b)=> (a.eventDate||"").localeCompare(b.eventDate||""));
+}
+function onFilterChange(){
+  state.filters = {
+    search: qs("#fSearch")?.value.trim() || "",
+    type: qs("#fType")?.value || "",
+    status: qs("#fStatus")?.value || "",
+    from: qs("#fFrom")?.value || "",
+    to: qs("#fTo")?.value || "",
+  };
+  renderAll();
+}
+["#fSearch","#fType","#fStatus","#fFrom","#fTo"].forEach(sel=> qs(sel)?.addEventListener("input", onFilterChange));
+qs("#btnClearFilters")?.addEventListener("click", ()=>{ ["fSearch","fType","fStatus","fFrom","fTo"].forEach(id=>{ const el=qs("#"+id); if(el) el.value="" }); onFilterChange() });
+
+/* ---------- Renderers ---------- */
+function renderKPIs(){
+  const elU = document.getElementById("kpiUpcoming");
+  const elC = document.getElementById("kpiCompletion");
+  const elO = document.getElementById("kpiOverdue");
+  const elR = document.getElementById("kpiRating");
+  if(!(elU && elC && elO && elR)) return;
+
+  const today = dayjs();
+
+  // Use filtered events for KPIs
+  const evs = filteredEvents();
+
+  // Only tasks/notes tied to the filtered events
+  const eventIds = new Set(evs.map(e => e.id));
+  const tasks = (store.data.tasks || []).filter(t => eventIds.has(t.eventId));
+  const notes = (store.data.notes || []).filter(n => eventIds.has(n.eventId));
+
+  // Upcoming events (>= today)
+  const upcoming = evs.filter(e => e.eventDate && dayjs(e.eventDate).isSameOrAfter(today, "day")).length;
+
+  // Task completion %
+  const totalTasks = tasks.length;
+  const completed  = tasks.filter(t => t.status === "Completed").length;
+  const completion = totalTasks ? Math.round((completed / totalTasks) * 100) : 0;
+
+  // Overdue tasks
+  const overdue = tasks.filter(t => t.status !== "Completed" && t.dueDate && dayjs(t.dueDate).isBefore(today, "day")).length;
+
+  // Average rating
+  const ratings = notes.map(n => Number(n.rating)).filter(Number.isFinite);
+  const avgRating = ratings.length ? (ratings.reduce((a,b)=>a+b,0) / ratings.length).toFixed(1) : "0.0";
+
+  // Paint
+  elU.textContent = String(upcoming);
+  elC.textContent = `${completion}%`;
+  elO.textContent = String(overdue);
+  elR.textContent = String(avgRating);
+}
+
+function renderEventsTable(){
+  const tbody=qs("#tblEvents tbody"); if(!tbody) return; tbody.innerHTML="";
+  for(const e of filteredEvents()){
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${e.title}</td>
+      <td><span class="pill">${e.eventType}</span></td>
+      <td>${fmtDate(e.eventDate)}</td>
+      <td>${e.address||""}</td>
+      <td><span class="status ${e.status==='Planning'?'s-planning':e.status==='Executing'?'s-executing':'s-completed'}">${e.status}</span></td>
+      <td>${e.owner||""}</td>
+      <td>${e.lat??""}</td>
+      <td>${e.lon??""}</td>
+      <td class="row">
+        <button class="ghost" onclick="editEvent('${e.id}')" title="Edit"><i class="ph ph-pencil"></i></button>
+        <button class="danger" onclick="delEvent('${e.id}')" title="Delete"><i class="ph ph-trash"></i></button>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+}
+function renderDashEvents(){
+  const tbody=qs("#tblDashEvents tbody"); if(!tbody) return; tbody.innerHTML="";
+  for(const e of filteredEvents().slice(0,12)){
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${e.title}</td><td>${e.eventType}</td><td>${fmtDate(e.eventDate)}</td><td>${e.address||""}</td><td><span class="status ${e.status==='Planning'?'s-planning':e.status==='Executing'?'s-executing':'s-completed'}">${e.status}</span></td><td>${e.owner||""}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+function renderTasks(){
+  const tbody=qs("#tblTasks tbody"); if(!tbody) return; tbody.innerHTML="";
+  const fIds = new Set(filteredEvents().map(e=>e.id));
+  const tasks = store.data.tasks.filter(t=>fIds.has(t.eventId));
+  for(const t of tasks){
+    const ev = store.data.events.find(e=>e.id===t.eventId);
+    const overdue=isOverdue(t);
+    const stClass=t.status==="Completed"?"s-completed":t.status==="In Progress"?"s-executing":overdue?"s-overdue":"";
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${t.title}</td>
+      <td>${ev?ev.title:""}</td>
+      <td>${fmtDate(t.dueDate)}</td>
+      <td>${t.assignedTo||""}</td>
+      <td><span class="status ${stClass}">${overdue?'Overdue':t.status}</span></td>
+      <td class="row">
+        <button class="ghost" onclick="completeTask('${t.id}')" title="Complete"><i class="ph ph-check"></i></button>
+        <button class="ghost" onclick="editTask('${t.id}')" title="Edit"><i class="ph ph-pencil"></i></button>
+        <button class="danger" onclick="delTask('${t.id}')" title="Delete"><i class="ph ph-trash"></i></button>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+}
+function renderDashTasks(){
+  const tbody=qs("#tblDashTasks tbody"); if(!tbody) return; tbody.innerHTML="";
+  const fIds = new Set(filteredEvents().map(e=>e.id));
+  const tasks = store.data.tasks.filter(t=>fIds.has(t.eventId) && t.status!=="Completed")
+    .sort((a,b)=>(a.dueDate||"9999").localeCompare(b.dueDate||"9999")).slice(0,12);
+  for(const t of tasks){
+    const ev = store.data.events.find(e=>e.id===t.eventId);
+    const overdue=isOverdue(t);
+    const stClass=t.status==="Completed"?"s-completed":t.status==="In Progress"?"s-executing":overdue?"s-overdue":"";
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${t.title}</td><td>${ev?ev.title:""}</td><td>${t.assignedTo||""}</td><td>${fmtDate(t.dueDate)}</td><td><span class="status ${stClass}">${overdue?'Overdue':t.status}</span></td><td class="row"><button class="ghost" onclick="completeTask('${t.id}')" title="Complete"><i class="ph ph-check"></i></button><button class="ghost" onclick="editTask('${t.id}')" title="Edit"><i class="ph ph-pencil"></i></button></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+/* ---------- Map ---------- */
+let mapInitDone=false; let _map=null; let _markers=[];
+function initMap(){ if(mapInitDone) return; const el=qs("#leafletMap"); if(!el) return;
+  _map=L.map(el).setView([23.6345,-102.5528],5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(_map);
+  mapInitDone=true;
+}
+function clearMarkers(){ _markers.forEach(m=>_map.removeLayer(m)); _markers=[] }
+function renderMap(){
+  initMap(); if(!_map) return; clearMarkers();
+  const evs = filteredEvents().filter(e=>e.lat && e.lon);
+  for(const e of evs){
+    const mrk=L.marker([e.lat,e.lon]).addTo(_map);
+    mrk.bindPopup(`<b>${e.title}</b><br>${e.eventType} — ${fmtDate(e.eventDate)}<br>${e.address||""}<br>Status: ${e.status}`);
+    _markers.push(mrk);
+  }
+  if(evs.length){ const group = new L.featureGroup(_markers); _map.fitBounds(group.getBounds().pad(0.2)); }
+}
+
+/* ---------- Address autocomplete (Nominatim) ---------- */
+const addrInput = qs("#eAddress"); const addrList = qs("#addrList");
+let addrTimer=null; let addrActiveIndex=-1;
+const stateAddr = { pick:null };
+function hideAddr(){ if(addrList){ addrList.style.display="none"; addrList.innerHTML=""; addrActiveIndex=-1; } }
+function showAddr(){ if(addrList){ addrList.style.display="block"; } }
+function debounced(fn,ms=350){ return (...args)=>{ clearTimeout(addrTimer); addrTimer=setTimeout(()=>fn(...args),ms) } }
+async function fetchSuggestions(q){
+  if(!addrList) return;
+  if(!q || q.length<3){ hideAddr(); return; }
+  const url=new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format","jsonv2"); url.searchParams.set("addressdetails","1"); url.searchParams.set("limit","8"); url.searchParams.set("q",q);
+  url.searchParams.set("viewbox","-118.6,14.3,-86.5,32.8"); url.searchParams.set("bounded","1");
+  const res=await fetch(url,{headers:{Accept:"application/json","User-Agent":"EventOpsBI/1.0 (GitHub Pages demo)"}});
+  if(!res.ok){ hideAddr(); return; }
+  const json=await res.json(); renderSuggestions(json);
+}
+function renderSuggestions(list){
+  if(!addrList) return;
+  if(!Array.isArray(list)||list.length===0){ hideAddr(); return; }
+  addrList.innerHTML=""; list.forEach((item,idx)=>{
+    const div=document.createElement("div");
+    div.className="autocomplete-item"+(idx===0?" active":"");
+    div.dataset.lat=item.lat; div.dataset.lon=item.lon; div.dataset.display=item.display_name;
+    div.innerHTML=`<i class="ph ph-map-pin"></i> ${item.display_name}`;
+    div.addEventListener("click",()=>selectSuggestion(div));
+    addrList.appendChild(div);
+  });
+  addrActiveIndex=0; showAddr();
+}
+function selectSuggestion(node){
+  const display=node.dataset.display; const lat=Number(node.dataset.lat); const lon=Number(node.dataset.lon);
+  if(qs("#eAddress")) qs("#eAddress").value=display;
+  if(qs("#eLat")) qs("#eLat").value=lat; if(qs("#eLon")) qs("#eLon").value=lon;
+  stateAddr.pick={display_name:display,lat,lon}; hideAddr();
+}
+addrInput?.addEventListener("input", debounced((e)=>{ stateAddr.pick=null; if(qs("#eLat")) qs("#eLat").value=""; if(qs("#eLon")) qs("#eLon").value=""; fetchSuggestions(e.target.value.trim()) },350));
+addrInput?.addEventListener("focus", ()=>{ if(addrList?.childElementCount>0) showAddr() });
+document.addEventListener("click",(e)=>{ if(addrList && !addrList.contains(e.target) && e.target!==addrInput) hideAddr() });
+addrInput?.addEventListener("keydown",(e)=>{
+  if(!addrList) return;
+  const items=Array.from(addrList.children); if(!items.length) return;
+  if(e.key==="ArrowDown"){ e.preventDefault(); addrActiveIndex=Math.min(items.length-1,addrActiveIndex+1); items.forEach(it=>it.classList.remove("active")); items[addrActiveIndex].classList.add("active"); items[addrActiveIndex].scrollIntoView({block:"nearest"}) }
+  if(e.key==="ArrowUp"){ e.preventDefault(); addrActiveIndex=Math.max(0,addrActiveIndex-1); items.forEach(it=>it.classList.remove("active")); items[addrActiveIndex].classList.add("active"); items[addrActiveIndex].scrollIntoView({block:"nearest"}) }
+  if(e.key==="Enter"){ e.preventDefault(); selectSuggestion(items[addrActiveIndex]) }
+});
+
+/* ---------- Actions ---------- */
+function resetEventForm(){
+  ["eId","eTitle","eOwner","eLat","eLon","eAddress"].forEach(id=>{ const el=qs("#"+id); if(el) el.value="" });
+  if(qs("#eType")) qs("#eType").value="Wedding";
+  if(qs("#eStatus")) qs("#eStatus").value="Planning";
+  if(qs("#eDate")) qs("#eDate").value="";
+  stateAddr.pick=null; hideAddr();
+}
+function editEvent(id){
+  const e=store.data.events.find(x=>x.id===id); if(!e) return;
+  if(qs("#eId")) qs("#eId").value=e.id;
+  if(qs("#eTitle")) qs("#eTitle").value=e.title||"";
+  if(qs("#eType")) qs("#eType").value=e.eventType||"Wedding";
+  if(qs("#eDate")) qs("#eDate").value=e.eventDate||"";
+  if(qs("#eStatus")) qs("#eStatus").value=e.status||"Planning";
+  if(qs("#eOwner")) qs("#eOwner").value=e.owner||"";
+  if(qs("#eAddress")) qs("#eAddress").value=e.address||"";
+  if(qs("#eLat")) qs("#eLat").value=e.lat??"";
+  if(qs("#eLon")) qs("#eLon").value=e.lon??"";
+  stateAddr.pick = e.address && e.lat && e.lon ? {display_name:e.address,lat:e.lat,lon:e.lon}:null;
+  switchTab("events");
+}
+function delEvent(id){ if(confirm("Delete event and its related tasks & notes?")){ store.removeEvent(id); renderAll() } }
+
+qs("#btnAddEvent")?.addEventListener("click",()=>{ resetEventForm(); switchTab("events"); qs("#eTitle")?.focus() });
+qs("#btnSaveEvent")?.addEventListener("click",()=>{
+  const title=qs("#eTitle")?.value.trim(); const type=qs("#eType")?.value; const date=qs("#eDate")?.value;
+  const status=qs("#eStatus")?.value; const owner=qs("#eOwner")?.value.trim(); const address=qs("#eAddress")?.value.trim();
+  let lat=qs("#eLat")?.value?Number(qs("#eLat").value):null; let lon=qs("#eLon")?.value?Number(qs("#eLon").value):null;
+  if(!title || !date){ alert("Please fill Title and Date"); return }
+  if(!(stateAddr.pick && stateAddr.pick.display_name===address)){ alert("Please select an address from suggestions."); return }
+  lat=stateAddr.pick.lat; lon=stateAddr.pick.lon;
+  const e={ id:(qs("#eId")?.value||"").trim()||null, title, eventType:type, eventDate:date, status, owner, address, lat, lon };
+  store.upsertEvent(e); resetEventForm(); renderAll();
+});
+qs("#btnResetEvent")?.addEventListener("click", resetEventForm);
+
+function resetTaskForm(){ ["tId","tTitle","tAssigned","tNotes"].forEach(id=>{const el=qs("#"+id); if(el) el.value=""}); if(qs("#tDue")) qs("#tDue").value=""; if(qs("#tStatus")) qs("#tStatus").value="Not Started"; fillEventSelectors() }
+function editTask(id){
+  const t=store.data.tasks.find(x=>x.id===id); if(!t) return;
+  if(qs("#tId")) qs("#tId").value=t.id; if(qs("#tEvent")) qs("#tEvent").value=t.eventId; if(qs("#tTitle")) qs("#tTitle").value=t.title||"";
+  if(qs("#tDue")) qs("#tDue").value=t.dueDate||""; if(qs("#tAssigned")) qs("#tAssigned").value=t.assignedTo||"";
+  if(qs("#tStatus")) qs("#tStatus").value=t.status||"Not Started"; if(qs("#tNotes")) qs("#tNotes").value=t.notes||"";
+  switchTab("tasks");
+}
+function delTask(id){ if(confirm("Delete this task?")){ store.removeTask(id); renderAll() } }
+function completeTask(id){ const t=store.data.tasks.find(x=>x.id===id); if(!t) return; t.status="Completed"; t.completedDate=dayjs().format("YYYY-MM-DDTHH:mm"); store.upsertTask(t); renderAll() }
+qs("#btnAddTask")?.addEventListener("click",()=>{ resetTaskForm(); switchTab("tasks"); qs("#tTitle")?.focus() });
+qs("#btnSaveTask")?.addEventListener("click",()=>{
+  const t={ id:(qs("#tId")?.value||"").trim()||null, eventId:qs("#tEvent")?.value, title:qs("#tTitle")?.value.trim(),
+    dueDate:qs("#tDue")?.value||"", assignedTo:qs("#tAssigned")?.value.trim(), status:qs("#tStatus")?.value, completedDate:"", notes:qs("#tNotes")?.value.trim() };
+  if(!t.eventId || !t.title){ alert("Please choose Event and fill Task title"); return }
+  store.upsertTask(t); resetTaskForm(); renderAll();
+});
+qs("#btnResetTask")?.addEventListener("click", resetTaskForm);
+
+function resetNoteForm(){ ["nId","nNotes","nBy"].forEach(id=>{const el=qs("#"+id); if(el) el.value=""}); if(qs("#nRating")) qs("#nRating").value="5"; if(qs("#nOn")) qs("#nOn").value=dayjs().format("YYYY-MM-DDTHH:mm"); fillEventSelectors() }
+function editNote(id){
+  const n=store.data.notes.find(x=>x.id===id); if(!n) return;
+  if(qs("#nId")) qs("#nId").value=n.id; if(qs("#nEvent")) qs("#nEvent").value=n.eventId; if(qs("#nRating")) qs("#nRating").value=n.rating||"5";
+  if(qs("#nNotes")) qs("#nNotes").value=n.notes||""; if(qs("#nBy")) qs("#nBy").value=n.createdBy||""; if(qs("#nOn")) qs("#nOn").value=n.createdOn||dayjs().format("YYYY-MM-DDTHH:mm");
+  switchTab("notes");
+}
+function delNote(id){ if(confirm("Delete this note?")){ store.removeNote(id); renderAll() } }
+qs("#btnAddNote")?.addEventListener("click",()=>{ resetNoteForm(); switchTab("notes"); qs("#nNotes")?.focus() });
+qs("#btnSaveNote")?.addEventListener("click",()=>{
+  const n={ id:(qs("#nId")?.value||"").trim()||null, eventId:qs("#nEvent")?.value, rating:Number(qs("#nRating")?.value), notes:qs("#nNotes")?.value.trim(), createdBy:qs("#nBy")?.value.trim(), createdOn:qs("#nOn")?.value || dayjs().format("YYYY-MM-DDTHH:mm") };
+  if(!n.eventId){ alert("Please choose Event"); return }
+  store.upsertNote(n); resetNoteForm(); renderAll();
+});
+qs("#btnResetNote")?.addEventListener("click", resetNoteForm);
+
+/* ---------- Export / Import ---------- */
+qs("#btnExport")?.addEventListener("click",()=>{ const blob=new Blob([JSON.stringify(store.data,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`event_ops_export_${dayjs().format("YYYYMMDD_HHmm")}.json`; a.click() });
+qs("#btnImport")?.addEventListener("click",()=>qs("#fileImport")?.click());
+qs("#fileImport")?.addEventListener("change",(ev)=>{
+  const f=ev.target.files[0]; if(!f) return; const reader=new FileReader();
+  reader.onload=()=>{ try{ const json=JSON.parse(reader.result); if(!json.events||!json.tasks||!json.notes) throw new Error("Invalid JSON"); store.data=json; store.save(); renderAll(); alert("Import successful!") }catch(e){ alert("Import failed: "+e.message) } };
+  reader.readAsText(f);
+});
+qs("#btnSeed")?.addEventListener("click",()=>{ if(confirm("Load demo data? This overwrites current data.")){ seedDemo(); renderAll() } });
+qs("#btnClear")?.addEventListener("click",()=>{ if(confirm("Clear ALL data?")){ localStorage.removeItem(LS_KEY); store.data={events:[],tasks:[],notes:[]}; renderAll() } });
+
+/* ---------- Tabs (force re-render on change) ---------- */
+function switchTab(name){
+  state.currentTab=name;
+  qsa(".tab").forEach(el=> el.style.display="none");
+  qsa(".tab-btn").forEach(el=> el.classList.remove("active"));
+  qs("#"+name)?.style && (qs("#"+name).style.display="");
+  qsa(".tab-btn").find(el=>el.dataset.tab===name)?.classList.add("active");
+  renderAll();
+  if(name==="map") setTimeout(()=> safe(renderMap), 50);
+}
+qsa(".tab-btn").forEach(btn=> btn.addEventListener("click", ()=> switchTab(btn.dataset.tab)));
+
+/* ---------- Init ---------- */
+(function init(){
+  store.load();
+  if(!store.data.events.length) seedDemo();
+  renderAll();
+  switchTab("dashboard");
+})();
+function renderAll(){
+  safe(renderKPIs);         // <— fixed KPIs
+  safe(fillEventSelectors);
+  safe(renderDashTasks);
+  safe(renderDashEvents);
+  safe(renderEventsTable);
+  safe(renderTasks);
+  safe(renderNotes);
+  if(state.currentTab==="map") safe(renderMap);
+}
+function fillEventSelectors(){
+  const selTask=qs("#tEvent"); const selNote=qs("#nEvent");
+  if(!(selTask && selNote)) return;
+  const evs=store.data.events.slice().sort((a,b)=>a.title.localeCompare(b.title));
+  selTask.innerHTML=""; selNote.innerHTML="";
+  for(const e of evs){
+    const o=document.createElement("option"); o.value=e.id; o.textContent=e.title;
+    selTask.appendChild(o); selNote.appendChild(o.cloneNode(true));
+  }
+}
+</script>
+</body>
+</html>
