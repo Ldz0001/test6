@@ -354,6 +354,12 @@ function seedDemo(){
 /* ---------- State & filters ---------- */
 const state={filters:{search:"",type:"",status:"",from:"",to:""}, currentTab:"dashboard", addressPick:null};
 function isOverdue(t){ if(t.status==="Completed"||!t.dueDate) return false; return dayjs(t.dueDate).isBefore(dayjs(),"day") }
+  function eventHasEnded(event,today=dayjs()){
+  if(!event) return false;
+  if((event.status||"").toLowerCase()==="completed") return true;
+  if(!event.eventDate) return false;
+  return !dayjs(event.eventDate).isAfter(today,"day");
+}
 function filteredEvents(){
   const f=state.filters;
   return store.data.events.filter(e=>{
@@ -400,7 +406,7 @@ function renderKPIs(){
   const notes = (store.data.notes || []).filter(n => eventIds.has(n.eventId));
 
   // Upcoming events (>= today)
- const upcoming = evs.filter(e => {
+   const upcoming = evs.filter(e => {
     if(!e.eventDate) return false;
     const eventDay = dayjs(e.eventDate);
     return !eventDay.isBefore(today, "day");
@@ -415,10 +421,9 @@ function renderKPIs(){
   const overdue = tasks.filter(t => t.status !== "Completed" && t.dueDate && dayjs(t.dueDate).isBefore(today, "day")).length;
 
   // Average rating
-   const ratings = notes.map(n => {
+     const ratings = notes.map(n => {
     const ev = store.data.events.find(e=>e.id===n.eventId);
-    if(!ev || !ev.eventDate) return null;
-    if(dayjs(ev.eventDate).isAfter(today, "day")) return null;
+      if(!eventHasEnded(ev,today)) return null;
     return Number(n.rating);
   }).filter(Number.isFinite);
   const avgRating = ratings.length ? (ratings.reduce((a,b)=>a+b,0) / ratings.length).toFixed(2) : "0.00";
@@ -650,7 +655,7 @@ function updateRatingAvailability(){
   if(!(ratingInput && eventSelect)) return;
   const eventId=eventSelect.value;
   const event=store.data.events.find(e=>e.id===eventId);
-  const canRate=!eventSelect.disabled && !!(event && event.eventDate && !dayjs(event.eventDate).isAfter(dayjs(),"day"));
+ const canRate=!eventSelect.disabled && !!(event && eventHasEnded(event));
   ratingInput.disabled=!canRate;
   ratingInput.placeholder=canRate?"0.00 – 5.00":"Available after event ends";
   if(!canRate) ratingInput.value="";
@@ -672,7 +677,7 @@ qs("#btnSaveNote")?.addEventListener("click",()=>{
   const ratingValue = ratingInput?.value ?? "";
   const ratingNumber = ratingValue === "" ? NaN : Number(ratingValue);
   const event = store.data.events.find(e=>e.id===eventId);
-  const eventEnded = !!(event && event.eventDate && !dayjs(event.eventDate).isAfter(dayjs(), "day"));
+const eventEnded = eventHasEnded(event);
   if(!eventId){ alert("Please choose a completed event"); return }
   if(!eventEnded){ alert("Ratings can only be added after the event date."); return }
   if(!Number.isFinite(ratingNumber) || ratingNumber<0 || ratingNumber>5){ alert("Please enter a rating between 0 and 5."); return }
@@ -738,7 +743,7 @@ function fillEventSelectors(){
     const prevNote=selNote.value;
     selNote.innerHTML="";
     const today=dayjs();
-    const endedEvents=evs.filter(e=>e.eventDate && !dayjs(e.eventDate).isAfter(today,"day"));
+     const endedEvents=evs.filter(e=>eventHasEnded(e,today));
     if(!endedEvents.length){
       const opt=document.createElement("option");
       opt.value="";
