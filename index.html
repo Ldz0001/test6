@@ -400,7 +400,11 @@ function renderKPIs(){
   const notes = (store.data.notes || []).filter(n => eventIds.has(n.eventId));
 
   // Upcoming events (>= today)
-  const upcoming = evs.filter(e => e.eventDate && dayjs(e.eventDate).isSameOrAfter(today, "day")).length;
+ const upcoming = evs.filter(e => {
+    if(!e.eventDate) return false;
+    const eventDay = dayjs(e.eventDate);
+    return !eventDay.isBefore(today, "day");
+  }).length;
 
   // Task completion %
   const totalTasks = tasks.length;
